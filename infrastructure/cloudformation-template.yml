@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Infrastructure for Asteroids Game - Static website hosting with CI/CD pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: asteroids-game
+    Description: Name of the project used for resource naming
+    AllowedPattern: ^[a-z0-9-]+$
+    ConstraintDescription: Must contain only lowercase letters, numbers, and hyphens
+
+  GitHubRepoOwner:
+    Type: String
+    Description: GitHub repository owner/organization name
+    AllowedPattern: ^[a-zA-Z0-9-]+$
+
+  GitHubRepoName:
+    Type: String
+    Description: GitHub repository name
+    Default: asteroids-game
+    AllowedPattern: ^[a-zA-Z0-9-_\.]+$
+
+  GitHubBranch:
+    Type: String
+    Description: GitHub branch to deploy from
+    Default: main
+    AllowedPattern: ^[a-zA-Z0-9-_/\.]+$
+
+  GitHubToken:
+    Type: String
+    Description: GitHub personal access token for repository access
+    NoEcho: true
+    MinLength: 40
+
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource tagging and configuration
+
+  EnableCloudFront:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Enable CloudFront distribution for better performance
+
+Conditions:
+  CreateCloudFront: !Equals [!Ref EnableCloudFront, 'true']
+  IsProduction: !Equals [!Ref Environment, 'prod']
+
+Resources:
+  # S3 Bucket for hosting static website
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      VersioningConfiguration:
+        Status: Enabled
+      NotificationConfiguration:
+        CloudWatchConfigurations:
+          - Event: s3:ObjectCreated:*
+            CloudWatchConfiguration:
+              LogGroupName: !Ref WebsiteLogGroup
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: StaticWebsiteHosting
+
+  # S3 Bucket Policy for public read access
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${WebsiteBucket}/*'
+            Condition:
+              StringEquals:
+                's3:ExistingObjectTag/Environment': !Ref Environment
+
+  # S3 Bucket for storing build artifacts
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-artifacts-${Environment}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: BuildArtifacts
+
+  # CloudWatch Log Group for monitoring
+  WebsiteLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/s3/${ProjectName}-${Environment}'
+      RetentionInDays: !If [IsProduction, 90, 30]
+
+  # CloudWatch Log Group for CodeBuild
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/codebuild/${ProjectName}-${Environment}'
+      RetentionInDays: !If [IsProduction, 30, 14]
+
+  # IAM Role for CodeBuild
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-codebuild-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildServicePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CloudWatch Logs permissions
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 
+                  - !Sub '${CodeBuildLogGroup}:*'
+                  - !Sub '${CodeBuildLogGroup}'
+              # S3 permissions for artifacts
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource:
+                  - !Sub '${ArtifactBucket}/*'
+                  - !Sub '${WebsiteBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub '${ArtifactBucket}'
+                  - !Sub '${WebsiteBucket}'
+              # CodeBuild report permissions
+              - Effect: Allow
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                  - codebuild:BatchPutCodeCoverages
+                Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/${ProjectName}-*'
+
+  # CodeBuild Project for Lint and Test
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${ProjectName}-build-${Environment}'
+      Description: !Sub 'Build project for ${ProjectName} - lint, test, and deploy'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: WEBSITE_BUCKET
+            Value: !Ref WebsiteBucket
+          - Name: PROJECT_NAME
+            Value: !Ref ProjectName
+          - Name: ENVIRONMENT
+            Value: !Ref Environment
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 18
+              commands:
+                - echo Logging in to Amazon ECR...
+                - echo Build started on `date`
+                - echo Installing dependencies...
+                - npm ci
+            pre_build:
+              commands:
+                - echo Pre-build started on `date`
+                - echo Running linting...
+                - npm run lint
+                - echo Running tests...
+                - npm run test:coverage
+            build:
+              commands:
+                - echo Build started on `date`
+                - echo Running build validation...
+                - npm run build
+                - echo Preparing files for deployment...
+                - mkdir -p dist
+                - cp -r src/ dist/
+                - cp index.html dist/
+                - cp package.json dist/
+                - cp README.md dist/
+            post_build:
+              commands:
+                - echo Post-build started on `date`
+                - echo Deploying to S3...
+                - aws s3 sync dist/ s3://$WEBSITE_BUCKET --delete --cache-control "max-age=86400"
+                - aws s3 cp dist/index.html s3://$WEBSITE_BUCKET/index.html --cache-control "max-age=0"
+                - echo Build completed on `date`
+          reports:
+            jest-reports:
+              files:
+                - coverage/lcov.info
+              base-directory: coverage
+              file-format: CLOVERXML
+          artifacts:
+            files:
+              - '**/*'
+            base-directory: dist
+      TimeoutInMinutes: 15
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # IAM Role for CodePipeline
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-codepipeline-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelineServicePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 permissions for artifacts
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketVersioning
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource:
+                  - !Sub '${ArtifactBucket}'
+                  - !Sub '${ArtifactBucket}/*'
+              # CodeBuild permissions
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: !GetAtt CodeBuildProject.Arn
+
+  # CodePipeline
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}-pipeline-${Environment}'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubRepoOwner
+                Repo: !Ref GitHubRepoName
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: BuildAndTest
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudFront Distribution (Optional)
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: CreateCloudFront
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'CloudFront distribution for ${ProjectName} ${Environment}'
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD, OPTIONS]
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          Compress: true
+          DefaultTTL: 86400
+          MaxTTL: 31536000
+          MinTTL: 0
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 300
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 300
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        IPV6Enabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Alarm for pipeline failures
+  PipelineFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-pipeline-failure-${Environment}'
+      AlarmDescription: !Sub 'Alarm for ${ProjectName} pipeline failures'
+      MetricName: PipelineExecutionFailure
+      Namespace: AWS/CodePipeline
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: PipelineName
+          Value: !Ref CodePipeline
+      TreatMissingData: notBreaching
+
+  # SNS Topic for notifications (optional)
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-notifications-${Environment}'
+      DisplayName: !Sub '${ProjectName} Deployment Notifications'
+
+Outputs:
+  WebsiteURL:
+    Description: URL of the static website
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-WebsiteURL'
+
+  WebsiteBucket:
+    Description: Name of the S3 bucket hosting the website
+    Value: !Ref WebsiteBucket
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-WebsiteBucket'
+
+  CloudFrontURL:
+    Condition: CreateCloudFront
+    Description: CloudFront distribution URL
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-CloudFrontURL'
+
+  PipelineName:
+    Description: Name of the CodePipeline
+    Value: !Ref CodePipeline
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-PipelineName'
+
+  CodeBuildProject:
+    Description: Name of the CodeBuild project
+    Value: !Ref CodeBuildProject
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-CodeBuildProject'

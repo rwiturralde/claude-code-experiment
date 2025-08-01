@@ -1,0 +1,158 @@
+version: 0.2
+
+# Environment variables can be overridden in CodeBuild project
+env:
+  variables:
+    NODE_VERSION: "18"
+    NPM_CONFIG_CACHE: "/tmp/.npm"
+    NPM_CONFIG_PROGRESS: "false"
+    NPM_CONFIG_UPDATE_NOTIFIER: "false"
+  
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Build started on $(date)"
+      - echo "Installing Node.js version $NODE_VERSION"
+      - node --version
+      - npm --version
+      - echo "Installing dependencies..."
+      - npm ci --only=production --silent
+      - npm ci --silent  # Install dev dependencies for testing
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on $(date)"
+      - echo "Running code quality checks..."
+      
+      # Run linting
+      - echo "Running ESLint..."
+      - npm run lint
+      - echo "✓ Linting passed"
+      
+      # Run unit tests with coverage
+      - echo "Running unit tests with coverage..."
+      - npm run test:coverage
+      - echo "✓ Unit tests passed"
+      
+      # Optional: Run additional checks
+      - echo "Validating package.json..."
+      - npm run --if-present validate
+      
+      # Security audit (will warn but not fail build)
+      - echo "Running security audit..."
+      - npm audit --audit-level=high || echo "⚠ Security audit found issues (non-blocking)"
+
+  build:
+    commands:
+      - echo "Build phase started on $(date)"
+      
+      # Run build command if exists
+      - echo "Running build validation..."
+      - npm run --if-present build
+      - echo "✓ Build validation completed"
+      
+      # Prepare distribution files
+      - echo "Preparing files for deployment..."
+      - mkdir -p dist
+      
+      # Copy source files
+      - cp -r src/ dist/
+      - cp index.html dist/
+      - cp package.json dist/
+      - cp README.md dist/
+      
+      # Copy any additional assets
+      - if [ -d "assets" ]; then cp -r assets/ dist/; fi
+      - if [ -f "favicon.ico" ]; then cp favicon.ico dist/; fi
+      - if [ -f "robots.txt" ]; then cp robots.txt dist/; fi
+      
+      # Optimize files for production
+      - echo "Optimizing files for production..."
+      
+      # Remove development files from distribution
+      - rm -rf dist/node_modules 2>/dev/null || true
+      - rm -f dist/package-lock.json 2>/dev/null || true
+      - rm -rf dist/.git 2>/dev/null || true
+      - rm -rf dist/tests 2>/dev/null || true
+      - rm -rf dist/coverage 2>/dev/null || true
+      
+      # Set cache control headers in deployment script
+      - echo "Files prepared for deployment"
+
+  post_build:
+    commands:
+      - echo "Post-build phase started on $(date)"
+      
+      # Deploy to S3 if WEBSITE_BUCKET is set
+      - |
+        if [ ! -z "$WEBSITE_BUCKET" ]; then
+          echo "Deploying to S3 bucket: $WEBSITE_BUCKET"
+          
+          # Sync all files except HTML files with long cache
+          aws s3 sync dist/ s3://$WEBSITE_BUCKET \
+            --delete \
+            --exclude "*.html" \
+            --cache-control "max-age=31536000, public, immutable"
+          
+          # Deploy HTML files with short cache for updates
+          aws s3 sync dist/ s3://$WEBSITE_BUCKET \
+            --exclude "*" \
+            --include "*.html" \
+            --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+          
+          # Set specific cache control for assets
+          aws s3 sync dist/src/css/ s3://$WEBSITE_BUCKET/src/css/ \
+            --cache-control "max-age=604800, public"
+          
+          aws s3 sync dist/src/js/ s3://$WEBSITE_BUCKET/src/js/ \
+            --cache-control "max-age=604800, public"
+          
+          echo "✓ Deployment to S3 completed"
+          
+          # Output the website URL
+          echo "Website URL: http://$WEBSITE_BUCKET.s3-website-$AWS_DEFAULT_REGION.amazonaws.com"
+        else
+          echo "WEBSITE_BUCKET not set, skipping S3 deployment"
+        fi
+      
+      # Invalidate CloudFront cache if distribution ID is provided
+      - |
+        if [ ! -z "$CLOUDFRONT_DISTRIBUTION_ID" ]; then
+          echo "Invalidating CloudFront cache..."
+          aws cloudfront create-invalidation \
+            --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
+            --paths "/*"
+          echo "✓ CloudFront invalidation initiated"
+        fi
+      
+      - echo "Build completed on $(date)"
+
+# Test reports for CodeBuild
+reports:
+  jest-reports:
+    files:
+      - 'coverage/clover.xml'
+      - 'coverage/lcov.info'
+    base-directory: 'coverage'
+    file-format: 'CLOVERXML'
+  
+  jest-junit:
+    files:
+      - 'coverage/junit.xml'
+    base-directory: 'coverage'
+    file-format: 'JUNITXML'
+
+# Build artifacts
+artifacts:
+  files:
+    - '**/*'
+  base-directory: 'dist'
+  name: '$(PROJECT_NAME)-$(CODEBUILD_BUILD_NUMBER)'
+
+# Cache dependencies to speed up builds
+cache:
+  paths:
+    - '/tmp/.npm/**/*'
+    - 'node_modules/**/*'

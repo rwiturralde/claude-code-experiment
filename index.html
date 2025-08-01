@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asteroids Game</title>
+    <link rel="stylesheet" href="src/css/styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="ui">
+            <div class="ui-item">
+                <span>Score: <span id="score" class="score">0</span></span>
+            </div>
+            <div class="ui-item">
+                <span>Lives: <span id="lives" class="lives">3</span></span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="controls">
+            <div>Game Controls</div>
+            <div class="controls-list">
+                <div class="control-item">
+                    <span class="key">↑↓←→</span>
+                    <span>Move</span>
+                </div>
+                <div class="control-item">
+                    <span class="key">Space</span>
+                    <span>Shoot</span>
+                </div>
+                <div class="control-item">
+                    <span class="key">R</span>
+                    <span>Restart</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="game-over" id="gameOver">
+        <div class="game-over-title">GAME OVER</div>
+        <div class="game-over-score">Final Score: <span id="finalScore">0</span></div>
+        <div class="game-over-instructions">Press R to restart</div>
+    </div>
+
+    <script type="module" src="src/js/main.js"></script>
+</body>
+</html>

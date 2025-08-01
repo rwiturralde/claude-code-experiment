@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "asteroids-game"
+  },
+  {
+    "ParameterKey": "GitHubRepoOwner",
+    "ParameterValue": "YOUR_GITHUB_USERNAME"
+  },
+  {
+    "ParameterKey": "GitHubRepoName", 
+    "ParameterValue": "asteroids-game"
+  },
+  {
+    "ParameterKey": "GitHubBranch",
+    "ParameterValue": "main"
+  },
+  {
+    "ParameterKey": "GitHubToken",
+    "ParameterValue": "YOUR_GITHUB_PERSONAL_ACCESS_TOKEN"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "prod"
+  },
+  {
+    "ParameterKey": "EnableCloudFront",
+    "ParameterValue": "true"
+  }
+]
