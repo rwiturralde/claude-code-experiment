@@ -6,6 +6,8 @@
 import { GAME_CONFIG } from '../config/gameConfig.js';
 import { logger } from '../utils/logger.js';
 
+const RAINBOW_COLORS = ['#ff0000', '#ff7700', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8800ff'];
+
 export class Asteroid {
     /**
      * Creates a new Asteroid instance
@@ -37,6 +39,7 @@ export class Asteroid {
         
         this.rotation = 0;
         this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+        this.color = GAME_CONFIG.GRAPHICS.FOREGROUND_COLOR;
         
         this._generateShape();
         
@@ -95,7 +98,7 @@ export class Asteroid {
             ctx.translate(this.x, this.y);
             ctx.rotate(this.rotation);
             
-            ctx.strokeStyle = GAME_CONFIG.GRAPHICS.FOREGROUND_COLOR;
+            ctx.strokeStyle = this.color;
             ctx.lineWidth = 1;
             ctx.beginPath();
             
@@ -130,15 +133,17 @@ export class Asteroid {
             const fragments = [];
             
             if (this.size === 'large') {
-                fragments.push(
-                    new Asteroid(this.x, this.y, 'medium'),
-                    new Asteroid(this.x, this.y, 'medium')
-                );
+                const frag1 = new Asteroid(this.x, this.y, 'medium');
+                const frag2 = new Asteroid(this.x, this.y, 'medium');
+                frag1.color = this.color;
+                frag2.color = this.color;
+                fragments.push(frag1, frag2);
             } else if (this.size === 'medium') {
-                fragments.push(
-                    new Asteroid(this.x, this.y, 'small'),
-                    new Asteroid(this.x, this.y, 'small')
-                );
+                const frag1 = new Asteroid(this.x, this.y, 'small');
+                const frag2 = new Asteroid(this.x, this.y, 'small');
+                frag1.color = this.color;
+                frag2.color = this.color;
+                fragments.push(frag1, frag2);
             }
             
             logger.debug('Asteroid broken', { originalSize: this.size, fragments: fragments.length });
@@ -147,6 +152,25 @@ export class Asteroid {
             logger.error('Failed to break asteroid', error);
             return [];
         }
+    }
+
+    /**
+     * Change the asteroid's color to a random rainbow color different from the current color
+     */
+    changeToRandomColor() {
+        this.color = Asteroid.getRandomRainbowColor(this.color);
+    }
+
+    /**
+     * Get a random rainbow color, optionally excluding a specific color
+     * @param {string|null} excludeColor - Color to exclude from selection
+     * @returns {string} A random rainbow color hex string
+     */
+    static getRandomRainbowColor(excludeColor = null) {
+        const colors = excludeColor
+            ? RAINBOW_COLORS.filter(c => c !== excludeColor)
+            : RAINBOW_COLORS;
+        return colors[Math.floor(Math.random() * colors.length)];
     }
 
     /**

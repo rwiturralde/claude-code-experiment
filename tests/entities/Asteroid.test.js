@@ -5,6 +5,8 @@
 import { Asteroid } from '../../src/js/entities/Asteroid.js';
 import { GAME_CONFIG } from '../../src/js/config/gameConfig.js';
 
+const RAINBOW_COLORS = ['#ff0000', '#ff7700', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8800ff'];
+
 describe('Asteroid', () => {
     let asteroid;
     let mockCtx;
@@ -79,6 +81,10 @@ describe('Asteroid', () => {
             expect(Array.isArray(asteroid.shapePoints)).toBe(true);
             expect(asteroid.shapePoints.length).toBe(GAME_CONFIG.ASTEROID.SHAPE_POINTS);
         });
+
+        test('should initialize color as white (FOREGROUND_COLOR)', () => {
+            expect(asteroid.color).toBe(GAME_CONFIG.GRAPHICS.FOREGROUND_COLOR);
+        });
     });
 
     describe('update', () => {
@@ -112,6 +118,13 @@ describe('Asteroid', () => {
             
             expect(mockCtx.strokeStyle).toBe(GAME_CONFIG.GRAPHICS.FOREGROUND_COLOR);
             expect(mockCtx.lineWidth).toBe(1);
+        });
+
+        test('should use asteroid color for stroke style', () => {
+            asteroid.color = '#ff0000';
+            asteroid.render(mockCtx);
+            
+            expect(mockCtx.strokeStyle).toBe('#ff0000');
         });
 
         test('should handle invalid context gracefully', () => {
@@ -152,6 +165,55 @@ describe('Asteroid', () => {
             const fragments = smallAsteroid.break();
             
             expect(fragments).toHaveLength(0);
+        });
+
+        test('should pass parent color to fragments', () => {
+            asteroid.color = '#ff0000';
+            const fragments = asteroid.break();
+            
+            expect(fragments[0].color).toBe('#ff0000');
+            expect(fragments[1].color).toBe('#ff0000');
+        });
+    });
+
+    describe('changeToRandomColor', () => {
+        test('should change color to a rainbow color', () => {
+            asteroid.changeToRandomColor();
+            expect(RAINBOW_COLORS).toContain(asteroid.color);
+        });
+
+        test('should change to a different color than current', () => {
+            asteroid.color = '#ff0000';
+            let changedToDifferent = false;
+            for (let i = 0; i < 50; i++) {
+                asteroid.color = '#ff0000';
+                asteroid.changeToRandomColor();
+                if (asteroid.color !== '#ff0000') {
+                    changedToDifferent = true;
+                    break;
+                }
+            }
+            expect(changedToDifferent).toBe(true);
+        });
+    });
+
+    describe('getRandomRainbowColor', () => {
+        test('should return a rainbow color', () => {
+            const color = Asteroid.getRandomRainbowColor();
+            expect(RAINBOW_COLORS).toContain(color);
+        });
+
+        test('should exclude the specified color', () => {
+            const excludedColor = '#ff0000';
+            for (let i = 0; i < 50; i++) {
+                const color = Asteroid.getRandomRainbowColor(excludedColor);
+                expect(color).not.toBe(excludedColor);
+            }
+        });
+
+        test('should return a rainbow color when no exclude provided', () => {
+            const color = Asteroid.getRandomRainbowColor(null);
+            expect(RAINBOW_COLORS).toContain(color);
         });
     });
 

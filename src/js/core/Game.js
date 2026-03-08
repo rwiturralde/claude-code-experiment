@@ -240,6 +240,9 @@ export class Game {
                 // Add score
                 this.score += asteroid.getPointValue();
                 
+                // Change asteroid color before breaking so fragments inherit the new color
+                asteroid.changeToRandomColor();
+                
                 // Break asteroid into smaller pieces
                 const fragments = asteroid.break();
                 this.asteroids.push(...fragments);
