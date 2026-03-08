@@ -156,7 +156,7 @@ This project includes infrastructure-as-code for deployment to AWS as a static w
 ### Pipeline Stages
 
 1. **Source**: Pulls code from GitHub repository
-2. **Build & Test**: Installs dependencies, runs `npm run lint` and `npm run test`, deploys to S3 if all checks pass
+2. **Build & Test**: Installs dependencies, runs `npm run lint` and `npm run test:coverage`, and deploys to S3 if all checks pass
 
 For detailed deployment instructions, see [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
