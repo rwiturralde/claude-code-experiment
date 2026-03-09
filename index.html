@@ -7,7 +7,16 @@
     <link rel="stylesheet" href="src/css/styles.css">
 </head>
 <body>
-    <div class="game-container">
+    <div class="start-screen" id="startScreen">
+        <div class="start-screen-title">ASTEROIDS</div>
+        <div class="start-screen-option">
+            <label for="bgColorPicker">Background Color:</label>
+            <input type="color" id="bgColorPicker" value="#000000">
+        </div>
+        <button id="startButton" class="start-button">Start Game</button>
+    </div>
+
+    <div class="game-container" id="gameContainer" style="display: none;">
         <div class="ui">
             <div class="ui-item">
                 <span>Score: <span id="score" class="score">0</span></span>

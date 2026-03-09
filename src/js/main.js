@@ -7,9 +7,10 @@ import { Game } from './core/Game.js';
 import { logger, LogLevel } from './utils/logger.js';
 
 /**
- * Initialize the game when the DOM is loaded
+ * Launch the game with the selected background color
+ * @param {string} backgroundColor - The chosen background color
  */
-function initializeGame() {
+function launchGame(backgroundColor) {
     try {
         logger.info('Initializing Asteroids game');
         
@@ -18,8 +19,25 @@ function initializeGame() {
             logger.setLevel(LogLevel.DEBUG);
         }
         
+        // Hide start screen, show game container
+        const startScreen = document.getElementById('startScreen');
+        const gameContainer = document.getElementById('gameContainer');
+        if (startScreen) {
+            startScreen.style.display = 'none';
+        }
+        if (gameContainer) {
+            gameContainer.style.display = '';
+        }
+
+        // Apply background color to page and canvas
+        document.body.style.background = backgroundColor;
+        const canvas = document.getElementById('gameCanvas');
+        if (canvas) {
+            canvas.style.background = backgroundColor;
+        }
+
         // Create and start the game
-        const game = new Game('gameCanvas');
+        const game = new Game('gameCanvas', { backgroundColor });
         
         // Make game accessible globally for debugging
         if (typeof window !== 'undefined') {
@@ -56,9 +74,23 @@ function initializeGame() {
     }
 }
 
-// Initialize game when DOM is ready
+/**
+ * Set up the start screen with background color picker
+ */
+function initializeStartScreen() {
+    const startButton = document.getElementById('startButton');
+    const bgColorPicker = document.getElementById('bgColorPicker');
+
+    if (startButton && bgColorPicker) {
+        startButton.addEventListener('click', () => {
+            launchGame(bgColorPicker.value);
+        });
+    }
+}
+
+// Initialize start screen when DOM is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeGame);
+    document.addEventListener('DOMContentLoaded', initializeStartScreen);
 } else {
-    initializeGame();
+    initializeStartScreen();
 }

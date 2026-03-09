@@ -116,6 +116,63 @@ canvas {
     margin-top: 10px;
 }
 
+/* Start screen */
+.start-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 25px;
+    min-height: 60vh;
+}
+
+.start-screen-title {
+    font-size: 48px;
+    font-weight: bold;
+    letter-spacing: 8px;
+    text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.3);
+}
+
+.start-screen-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+}
+
+.start-screen-option label {
+    color: #ccc;
+}
+
+.start-screen-option input[type="color"] {
+    width: 50px;
+    height: 35px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.start-button {
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    font-weight: bold;
+    color: #fff;
+    background: transparent;
+    border: 2px solid #fff;
+    border-radius: 5px;
+    padding: 12px 40px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.start-button:hover {
+    background: #fff;
+    color: #000;
+}
+
 /* Loading screen */
 .loading {
     position: absolute;

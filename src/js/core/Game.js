@@ -15,9 +15,11 @@ export class Game {
     /**
      * Creates a new Game instance
      * @param {string} canvasId - The ID of the canvas element
+     * @param {Object} [options] - Optional game configuration
+     * @param {string} [options.backgroundColor] - Background color for the game canvas
      * @throws {Error} If canvas element is not found or invalid
      */
-    constructor(canvasId = 'gameCanvas') {
+    constructor(canvasId = 'gameCanvas', options = {}) {
         try {
             this.canvas = document.getElementById(canvasId);
             if (!this.canvas) {
@@ -31,6 +33,7 @@ export class Game {
 
             this.width = this.canvas.width || GAME_CONFIG.CANVAS_WIDTH;
             this.height = this.canvas.height || GAME_CONFIG.CANVAS_HEIGHT;
+            this.backgroundColor = options.backgroundColor || GAME_CONFIG.GRAPHICS.BACKGROUND_COLOR;
             
             this._initializeGame();
             this._setupInputHandling();
@@ -348,7 +351,7 @@ export class Game {
     _render() {
         try {
             // Clear canvas
-            this.ctx.fillStyle = GAME_CONFIG.GRAPHICS.BACKGROUND_COLOR;
+            this.ctx.fillStyle = this.backgroundColor;
             this.ctx.fillRect(0, 0, this.width, this.height);
             
             // Render entities
